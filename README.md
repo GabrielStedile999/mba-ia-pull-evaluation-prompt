@@ -133,38 +133,103 @@ Critérios de Aceitação:
 
 ## Processo de otimização (iterações)
 
-<!-- PREENCHER após rodar `python src/evaluate.py`: copie as notas de cada execução. -->
+A abordagem foi projetar o v2 a partir da análise prévia do que os juízes medem (`src/metrics.py`) e do formato das 15 respostas de referência do dataset, em vez de tentar por tentativa e erro. Com isso, a primeira execução da avaliação já aprovou o prompt em todas as métricas:
 
-| Iteração | Mudança principal | Helpfulness | Correctness | F1 | Clarity | Precision | Status |
-|----------|-------------------|-------------|-------------|----|---------|-----------|--------|
-| v1 (baseline) | Prompt original do Hub | - | - | - | - | - | - |
-| v2.0 | Role + Few-shot + CoT + Skeleton, regras e edge cases | - | - | - | - | - | - |
+| Iteração | Mudança principal | Helpfulness | Correctness | F1 | Clarity | Precision | Média | Status |
+|----------|-------------------|-------------|-------------|----|---------|-----------|-------|--------|
+| v1 (baseline) | Prompt original do Hub (sem persona, sem formato, sem exemplos, `{bug_report}` duplicado) | - | - | - | - | - | - | não avaliado (o `evaluate.py` avalia apenas o v2) |
+| **v2** | Role Prompting + Few-shot (3 exemplos) + Chain of Thought + Skeleton of Thought, 9 regras e 7 edge cases | **0.87** ✓ | **0.90** ✓ | **0.88** ✓ | **0.83** ✓ | **0.91** ✓ | **0.8765** | ✅ APROVADO |
 
-Como analisar uma iteração reprovada: abra o experimento no LangSmith, ordene pela métrica mais baixa, leia o `comment` do juiz (campo *reasoning*) e o tracing do exemplo. Ajuste o prompt em `prompts/bug_to_user_story_v2.yml`, rode `python src/push_prompts.py` e depois `python src/evaluate.py` novamente.
+Modelos: `gpt-4.1-mini` (geração e avaliação), `temperature=0`. Experimento: `gabrielstedile-bug_to_user_story_v2-71879cb7` (15/15 runs).
+
+### Análise por exemplo
+
+Numeração conforme a tabela do experimento no LangSmith:
+
+| # | Bug | F1 | Clarity | Precision | Observação |
+|---|-----|----|---------|-----------|------------|
+| 11 | Botão adicionar ao carrinho (simples) | 1.00 | 0.80 | 0.90 | Story enxuta, 5 critérios, sem seções extras |
+| 5 | Campo de e-mail sem @ (simples) | 1.00 | 0.90 | 1.00 | Melhor exemplo: espelha a referência |
+| 7 | Webhook de pagamento (médio) | 0.92 | 0.70 | 0.90 | Preservou endpoint e HTTP 500; juiz de Clarity penalizou extensão do Contexto Técnico |
+| 10 | Modal atrás do menu (médio) | 0.69 | 0.85 | 0.80 | Ponto mais baixo em F1: a referência traz seção de acessibilidade (ESC, foco) que o relato não menciona |
+| 12 | Relatório de vendas lento (médio) | 0.65 | 0.75 | 0.80 | Persona "analista de vendas" vs. "gerente de vendas" da referência; menor nota do experimento |
+| 13 | App offline-first (complexo) | 0.92 | 0.95 | 1.00 | Todas as seções do NÍVEL 3 geradas; 10s de latência |
+| 3 | Checkout com múltiplas falhas (complexo) | 0.95 | 0.95 | 1.00 | Impacto e problemas técnicos preservados com os números do relato |
+
+Diagnóstico das notas mais baixas (10 e 12): o juiz de F1 compara com uma referência que inclui detalhes não presentes no relato de bug (ex.: critérios de acessibilidade). Como a regra 5 do prompt proíbe inventar informações, o v2 deliberadamente não os adiciona: é uma troca consciente entre Recall (F1) e Precision, e a Precision média de 0.91 mostra que a escolha compensou.
+
+Como iterar, se necessário: abra o experimento no LangSmith, ordene pela métrica mais baixa, leia o `comment` do juiz (campo *reasoning*) e o tracing do exemplo. Ajuste o prompt em `prompts/bug_to_user_story_v2.yml`, rode `python src/push_prompts.py` e depois `python src/evaluate.py` novamente.
 
 ## Resultados Finais
 
-### Link público do dataset de avaliação (com os experimentos)
+### Links públicos
 
-<!-- PREENCHER com a saída de `python src/share_dataset.py` -->
+| Evidência | Link |
+|-----------|------|
+| Dataset de avaliação `mba-ia-pull-evaluation-prompt-eval` (15 exemplos) + experimentos | https://smith.langchain.com/public/b4fd0458-bbd6-4114-bb78-2fad70037ab2/d |
+| Experimento v2 (tabela por exemplo, com as 5 notas e tracing) | https://smith.langchain.com/public/b4fd0458-bbd6-4114-bb78-2fad70037ab2/d/compare?selectedSessions=8a5f1681-43e6-42b9-945f-9f1c2cb59396 |
+| Prompt otimizado no LangSmith Hub (público) | https://smith.langchain.com/hub/gabrielstedile/bug_to_user_story_v2 |
+| Prompt original (semente do desafio) | https://smith.langchain.com/hub/leonanluppi/bug_to_user_story_v1 |
 
-Dataset `mba-ia-pull-evaluation-prompt-eval` (15 exemplos): **[COLE AQUI O LINK PÚBLICO]**
+Os links públicos abrem sem login. No experimento, clique em qualquer linha para ver o tracing completo (input, output, referência, feedback das 5 métricas e a chamada `ChatOpenAI` com o prompt renderizado).
 
-Prompt otimizado no Hub: `https://smith.langchain.com/hub/{USERNAME_LANGSMITH_HUB}/bug_to_user_story_v2`
+### Saída do terminal (`python src/evaluate.py`)
+
+```
+Prompt: gabrielstedile/bug_to_user_story_v2
+==================================================
+
+Métricas Derivadas:
+  - Helpfulness: 0.87 ✓
+  - Correctness: 0.90 ✓
+
+Métricas Base:
+  - F1-Score: 0.88 ✓
+  - Clarity: 0.83 ✓
+  - Precision: 0.91 ✓
+
+--------------------------------------------------
+📊 MÉDIA GERAL: 0.8765
+--------------------------------------------------
+
+✅ STATUS: APROVADO - Todas as métricas >= 0.8
+```
+
+Saída completa em [`docs/evidencias/01-terminal-evaluate.txt`](docs/evidencias/01-terminal-evaluate.txt).
 
 ### Screenshots das avaliações
 
-<!-- PREENCHER: salve as imagens em docs/evidencias/ (ver docs/evidencias/README.md) -->
+**Experimento v2 com as 5 métricas (médias ≥ 0.8)**
 
-| Evidência | Imagem |
-|-----------|--------|
-| Terminal com STATUS: APROVADO (todas >= 0.8) | ![evaluate](docs/evidencias/01-terminal-evaluate.png) |
-| Dataset com 15 exemplos | ![dataset](docs/evidencias/02-dataset-15-exemplos.png) |
-| Experimento v2 com as 5 métricas | ![experimento](docs/evidencias/03-experimento-v2-metricas.png) |
-| Tracing detalhado - exemplo simples | ![tracing1](docs/evidencias/04-tracing-exemplo-1.png) |
-| Tracing detalhado - exemplo médio | ![tracing2](docs/evidencias/05-tracing-exemplo-2.png) |
-| Tracing detalhado - exemplo complexo | ![tracing3](docs/evidencias/06-tracing-exemplo-3.png) |
-| Prompt v2 publicado no Hub | ![hub](docs/evidencias/07-prompt-hub-v2.png) |
+![experimento](docs/evidencias/03-experimento-v2-metricas.jpg)
+
+**Experimento v2 - notas por exemplo (15/15 runs)**
+
+![experimento por exemplo](docs/evidencias/03b-experimento-v2-por-exemplo.jpg)
+
+**Dataset com 15 exemplos**
+
+![dataset](docs/evidencias/02-dataset-15-exemplos.jpg)
+
+**Tracing detalhado - exemplo simples (#11, "Botão de adicionar ao carrinho")**
+
+![tracing simples](docs/evidencias/04-tracing-exemplo-simples.jpg)
+
+**Tracing detalhado - exemplo médio (#7, "Webhook de pagamento")**
+
+![tracing médio](docs/evidencias/05-tracing-exemplo-medio.jpg)
+
+**Tracing detalhado - exemplo complexo (#13, "App offline-first")**
+
+![tracing complexo](docs/evidencias/06-tracing-exemplo-complexo.jpg)
+
+**Tracing - chamada ao modelo (system + user prompt renderizados, tokens e custo)**
+
+![tracing llm](docs/evidencias/06-tracing-exemplo-complexo-llm.jpg)
+
+**Prompt v2 publicado no Hub (público, com tags e técnicas)**
+
+![hub](docs/evidencias/07-prompt-hub-v2.jpg)
 
 ### Comparação v1 x v2: o que mudou e por quê
 
@@ -211,7 +276,7 @@ Preencha no `.env`:
 ```
 LANGSMITH_API_KEY=lsv2_...
 LANGSMITH_PROJECT=mba-ia-pull-evaluation-prompt
-USERNAME_LANGSMITH_HUB=seu-handle
+USERNAME_LANGSMITH_HUB=gabrielstedile
 OPENAI_API_KEY=sk-...
 LLM_PROVIDER=openai
 LLM_MODEL=gpt-4.1-mini
